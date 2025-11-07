@@ -1,0 +1,88 @@
+1. Te quiero preguntar nombre de la seccional donde se gestiona el caso es la columna nombre dependencia o la columna nombre dependencia. Porque las cantidades son diferentes. Se responde con la columna D
+2.  Para la segunda pregunta en la tabla qué columna sería la ventanilla porque no me queda claro cuál es? Entiendo que es para medir el tiempo de los 2 días cierto entonces esa es una pregunta, como se haría? 
+3. Para la tercera pregunta entiendo que es la diferencia de días entre la fecha de creación y la fecha de asignación teniendo en cuenta los días hábiles y lo que me llama la atención es que los cálculos de días no dan exactamente igual entonces para aclarar eso.
+4. Para la número cuatro nombre del servidor que gestionó la creación de la noticia sería el mismo receptor de la noticia? eso es lo que entiendo, agradezco validar.
+5. El delito con que fue creada sería la columna l, pero veo que casi no salen delitos.
+6. La columna despacho fiscal no se manejaba antes.
+7. Aclarar cual es ventanilla, si es la ventanilla o la mesa?. Diferencia entre ventanilla y mesa.
+8. Cual es el proceso? Que lo compone? MBU Acto urgente o fuente no formal? acto urgente es inmediato y inmediatas
+9. La fecha de asignación es la fecha que ventanilla le asigna a mesa, entonces quito las demás?
+10.¿Qué pasa cuando la tabla SPOA tiene noticia y el Orfeo no tiene?
+11 Identificar las incompletas en cuanto a las preguntas de valor.
+
+ventanilla y fecha de ingreso 2 días
+
+
+En el tablero generar receptores que no llena el delito
+
+20253160004221
+
+
+20253160007925
+
+
+20253160007665
+
+
+la ventanilla es mas grande que la mesa, por principio general no lo contrario. Cuando sucede algo al revés es un error que hay que revisar. La ventanilla tiene mas radicados que la mesa.
+
+Hay que hacer tabla que controle los delitos que son MBU y acto urgente porque tienen un diferente tiempo, tienen el tiempo de un día.
+
+Esa tabla esta pendiente.
+
+Cuando los días sean negativos, hay que notificar porque es un error.
+
+Cuando se tiene Orfeo la ventanilla es diferente a la mesa y cuando no se tiene Orfeo la ventanilla es la misma mesa.
+
+
+La mesa se alimenta de la ventanilla de Orfeo.
+
+Los actos urgentes y las fuentes no formales de manera física debería llegar a la mesa, pero los tiempos son diferentes porque implica el tiempo de un día.
+
+Saber que delitos son actos urgentes y fuentes no formales. Se entregara tabla que determine que delitos son actos urgentes o fuentes no formales o mbu, para saber cuales son de un día.
+
+En caso de haber nuevos códigos de oficinas que ya tengan Orfeo Maria Enet Enviara Tabla 
+
+Debe haber noticia que viene de SPOA y debe existir también en Orfeo y viceversa.
+
+
+Siempre hay ventanilla lo que no hay  siempre  es mesa.
+
+
+Cuando aparece como mesa es porque son fase 2
+
+El problema es que caso de fecha creación es digitado, no automático, por eso se generan errores.
+
+Faltan códigos de ventanilla y fecha de ingreso a ventanilla , que es el registro del orfeo.
+
+Nombre de creador o líder es el mismo.
+
+Confirmar códigos de ventanilla
+
+Todo debe quedar en Orfeo tal y cual como esta en el SPOA.
+
+Lo del correo es futuro. Para generar Cultura.
+
+Indicador de receptores que no han llenado completo la tabla.
+
+En Orfeo hay ventanilla y mesa. Cuando no es lo mismo.
+
+Hay radicados que están en la ventanilla, pero no están en la mesa porque no corresponden o porque hay un error.
+
+Las urgentes casi no llegan a la mesa y se le dice a la seccional.
+
+Ventanilla "Orfea" todo lo que sea física.
+
+Los anónimos podrían ser de mas de un día.
+
+Los delitos urgentes toca saber cuales son y toca saber la tabla.
+
+Siempre debe coincidir la noticia entre Orfeo y Spoa.
+
+
+
+
+
+
+
+
