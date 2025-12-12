@@ -1,9 +1,8 @@
-
 # -*- coding: utf-8 -*-
 import os
 import pandas as pd
 import numpy as np
-from openpyxl.styles import numbers
+from openpyxl.styles import numbers, Alignment
 
 print("== Inicio del script ==")
 
@@ -37,12 +36,12 @@ def detectar_columna(df, candidatos):
     mapa = {c.lower().strip(): c for c in reales}
     for cand in candidatos:
         k = cand.lower().strip()
-        if k in mapa: 
+        if k in mapa:
             return mapa[k]
     for cand in candidatos:
         k = cand.lower().strip()
         for norm, real in mapa.items():
-            if k in norm: 
+            if k in norm:
                 return real
     return None
 
@@ -69,6 +68,15 @@ def normalizar_radicado(x):
     s_digits = "".join(ch for ch in s if ch.isdigit())
     return s_digits.zfill(LONG_RAD) if s_digits else s
 
+def normalizar_texto(x):
+    """Uppercase sin tildes para dependencias."""
+    if pd.isna(x):
+        return ""
+    s = str(x).upper()
+    return (s.replace("Á","A").replace("É","E")
+             .replace("Í","I").replace("Ó","O")
+             .replace("Ú","U"))
+
 def dias_habiles(a, b, include_end=INCLUDE_END):
     """Días hábiles (lun-vie) entre a y b excluyendo festivos (2025)."""
     if a is None or b is None or pd.isna(a) or pd.isna(b):
@@ -93,6 +101,21 @@ def dias_naturales(a, b, inclusive=False):
         return np.nan
     diff = (b - a).days
     return diff + 1 if inclusive else diff
+
+# --- Normalización de nombres y deduplicación conservando la última (derecha) ---
+def norm_colname(s: str) -> str:
+    return str(s).strip().upper().replace(" ", "_")
+
+def dedupe_keep_last_by_name(df: pd.DataFrame, target: str) -> pd.DataFrame:
+    """Si hay varias columnas cuyo nombre normalizado coincide con target, conserva la última y elimina anteriores."""
+    target_norm = norm_colname(target)
+    cols = list(df.columns)
+    idxs = [i for i, c in enumerate(cols) if norm_colname(c) == target_norm]
+    if len(idxs) <= 1:
+        return df
+    drop_idx_set = set(idxs[:-1])
+    new_cols = [c for i, c in enumerate(cols) if i not in drop_idx_set]
+    return df[new_cols]
 
 # -------------------------------------------------------------------
 # Lectura
@@ -129,38 +152,36 @@ if faltantes:
 
 # -------------------------------------------------------------------
 # Normalizar fechas (sin hora) y radicado (texto de 14 dígitos)
-# ⚠ Se sobreescriben las columnas originales para que NO salgan con hora
 # -------------------------------------------------------------------
 df[col_asigna]    = parsear_fecha_solo_date(df[col_asigna])
 df[col_caso_crea] = parsear_fecha_solo_date(df[col_caso_crea])
 
 df["_fecha_asignacion"]    = df[col_asigna]          # internas (date)
 df["_caso_fecha_creacion"] = df[col_caso_crea]       # internas (date)
+df["_rad_str"]             = df[col_radicado].apply(normalizar_radicado).astype("string")
 
-df["_rad_str"] = df[col_radicado].apply(normalizar_radicado).astype("string")
+# Usar radicado normalizado hacia adelante
+df[col_radicado] = df["_rad_str"].astype("string")
 
 # -------------------------------------------------------------------
-# Máscaras de dependencia
+# Máscaras de dependencia robustas
 # -------------------------------------------------------------------
-dep_upper = df[col_dep].astype(str).str.upper()
-mask_vent = dep_upper.str.startswith("VENTANILLA", na=False)
-mask_mesa = dep_upper.str.startswith("MESA",       na=False)
+dep_norm = df[col_dep].apply(normalizar_texto)
+mask_vent = dep_norm.str.contains("VENTANILL", na=False)   # captura VENTANILLA/VENTANILL
+mask_mesa = dep_norm.str.contains("MESA", na=False)
 
 # -------------------------------------------------------------------
 # PAREO VERTICAL (VENTANILLA ↔ MESA) POR RADICADO
-# TOTAL_DIAS_VENTANILLA = fecha_asignacion (MESA) - fecha_asignacion (VENTANILLA)
-# (Se usa internamente; NO se escribirá 'MESA_FECHA_REFERENCIA' en el Excel)
 # -------------------------------------------------------------------
 print("Construyendo referencia de fecha_asignacion en MESA por radicado...")
-mesa_asig = (df.loc[mask_mesa, ["_rad_str", "_fecha_asignacion"]]
+mesa_asig = (df.loc[mask_mesa, [col_radicado, "_fecha_asignacion"]]
                .dropna()
-               .groupby("_rad_str")["_fecha_asignacion"]
+               .groupby(col_radicado)["_fecha_asignacion"]
                .apply(list)
                .to_dict())
 
 def mesa_ref_date(radicado, vent_date):
-    """Elige la fecha_asignacion de MESA para el radicado.
-    Preferimos la primera fecha MESA >= vent_date; si no hay, usamos la mínima."""
+    """Primera fecha MESA >= vent_date; si no hay, mínima MESA."""
     fechas = mesa_asig.get(radicado, [])
     fechas_validas = [d for d in fechas if pd.notna(d)]
     if not fechas_validas:
@@ -169,38 +190,33 @@ def mesa_ref_date(radicado, vent_date):
     return min(posteriores) if posteriores else min(fechas_validas)
 
 print("Calculando TOTAL_DIAS_VENTANILLA (hábiles y naturales)...")
-df["TOTAL_DIAS_VENTANILLA_NATURALES"] = np.nan
-df["TOTAL_DIAS_VENTANILLA_HABILES"]   = np.nan
+df["TOTAL_DIAS_VENTANILLA_NATURALES"] = np.nan  # interno
+df["TOTAL_DIAS_VENTANILLA_HABILES"]   = np.nan  # interno
 
-pareos_logrados = 0  # contador solicitado
+pareos_logrados = 0
 
 for i in df.index:
     if mask_vent.iloc[i] and pd.notna(df.loc[i, "_fecha_asignacion"]):
-        rad = df.loc[i, "_rad_str"]
+        rad = df.loc[i, col_radicado]
         vent_date = df.loc[i, "_fecha_asignacion"]
         mesa_date = mesa_ref_date(rad, vent_date)
         if pd.notna(mesa_date):
             pareos_logrados += 1
-            # Naturales (exclusivos; cambia inclusive=True si lo requieres)
             df.at[i, "TOTAL_DIAS_VENTANILLA_NATURALES"] = dias_naturales(vent_date, mesa_date, inclusive=False)
-            # Hábiles (INCLUDE_END controla inclusión del fin)
             df.at[i, "TOTAL_DIAS_VENTANILLA_HABILES"]   = dias_habiles(vent_date, mesa_date, include_end=INCLUDE_END)
 
+# Principal = hábiles
 df["TOTAL_DIAS_VENTANILLA"] = df["TOTAL_DIAS_VENTANILLA_HABILES"]
-
-# 👉 Reporte solicitado: pareos logrados
 print(f"Pareos VENT ↔ MESA logrados: {pareos_logrados}/{int(mask_vent.sum())}")
 
 # -------------------------------------------------------------------
 # HORIZONTAL EN MESA
-# TIEMPO_EN_MESA_DE_CREACION = CASO_FECHA_CREACION (MESA) - fecha_asignacion (MESA)
 # -------------------------------------------------------------------
 print("Calculando TIEMPO_EN_MESA_DE_CREACION (hábiles y naturales)...")
-df["TIEMPO_EN_MESA_DE_CREACION_NATURALES"] = np.nan
-df["TIEMPO_EN_MESA_DE_CREACION_HABILES"]   = np.nan
+df["TIEMPO_EN_MESA_DE_CREACION_NATURALES"] = np.nan  # interno (oculto)
+df["TIEMPO_EN_MESA_DE_CREACION_HABILES"]   = np.nan  # interno (oculto)
 
 mesa_rows = df.loc[mask_mesa].index
-
 df.loc[mesa_rows, "TIEMPO_EN_MESA_DE_CREACION_NATURALES"] = [
     dias_naturales(a, b, inclusive=False) for a, b in zip(
         df.loc[mesa_rows, "_fecha_asignacion"],
@@ -213,10 +229,10 @@ df.loc[mesa_rows, "TIEMPO_EN_MESA_DE_CREACION_HABILES"] = [
         df.loc[mesa_rows, "_caso_fecha_creacion"]
     )
 ]
-df["TIEMPO_EN_MESA_DE_CREACION"] = df["TIEMPO_EN_MESA_DE_CREACION_HABILES"]
+df["TIEMPO_EN_MESA_DE_CREACION"] = df["TIEMPO_EN_MESA_DE_CREACION_HABILES"]  # principal
 
 # -------------------------------------------------------------------
-# ALERTAS
+# ALERTAS (visible)
 # -------------------------------------------------------------------
 print("Generando alertas...")
 ALERTA = []
@@ -227,11 +243,9 @@ for i, row in df.iterrows():
             avisos.append("VENT: Sin MESA para pareo (mismo radicado)")
         if pd.notna(row["TOTAL_DIAS_VENTANILLA_HABILES"]) and row["TOTAL_DIAS_VENTANILLA_HABILES"] < 0:
             avisos.append("VENT: Diferencia negativa (MESA < VENT)")
-        # Auditoría: si hubo múltiples MESA y se logró pareo
-        cant_mesa = len([d for d in mesa_asig.get(row["_rad_str"], []) if pd.notna(d)])
+        cant_mesa = len([d for d in mesa_asig.get(row[col_radicado], []) if pd.notna(d)])
         if cant_mesa > 1 and pd.notna(row["TOTAL_DIAS_VENTANILLA_HABILES"]):
             avisos.append(f"VENT: MESA múltiple ({cant_mesa}) → se eligió la más cercana ≥ VENT")
-
     if mask_mesa.iloc[i]:
         if pd.isna(row["_fecha_asignacion"]) or pd.isna(row["_caso_fecha_creacion"]):
             avisos.append("MESA: Fecha(s) faltante(s)")
@@ -240,34 +254,44 @@ for i, row in df.iterrows():
     ALERTA.append("; ".join(avisos) if avisos else "")
 df["ALERTA"] = ALERTA
 
+# -------------------------------------------------------------------
+# Métricas de calidad (explican por qué salen alertas de fechas faltantes)
+# -------------------------------------------------------------------
+faltan_asig_mesa = int(df.loc[mask_mesa, "_fecha_asignacion"].isna().sum())
+faltan_crea_mesa = int(df.loc[mask_mesa, "_caso_fecha_creacion"].isna().sum())
+faltan_asig_vent = int(df.loc[mask_vent, "_fecha_asignacion"].isna().sum())
+print(f"Fechas faltantes en MESA → asignación: {faltan_asig_mesa} | creación: {faltan_crea_mesa}")
+print(f"Fechas faltantes en VENTANILLA → asignación: {faltan_asig_vent}")
+
+# -------------------------------------------------------------------
 # Filas pertinentes
+# -------------------------------------------------------------------
 pertinentes = df["ALERTA"].astype(bool) | \
               df["TOTAL_DIAS_VENTANILLA"].notna() | \
               df["TIEMPO_EN_MESA_DE_CREACION"].notna()
 df_pert = df.loc[pertinentes].copy()
 
 # -------------------------------------------------------------------
-# Resumen por radicado (vista rápida)
+# Resumen por radicado (vista rápida) - SOLO columnas principales
 # -------------------------------------------------------------------
 print("Construyendo resumen por radicado...")
 tmp = df.loc[mask_vent | mask_mesa, [col_radicado, col_dep,
-    "TOTAL_DIAS_VENTANILLA","TIEMPO_EN_MESA_DE_CREACION",
-    "TOTAL_DIAS_VENTANILLA_NATURALES","TIEMPO_EN_MESA_DE_CREACION_NATURALES"]].copy()
-tmp["tipo"] = np.where(tmp[col_dep].astype(str).str.upper().str.startswith("VENTANILLA"), "VENTANILLA", "MESA")
+    "TOTAL_DIAS_VENTANILLA","TIEMPO_EN_MESA_DE_CREACION"]].copy()
+tmp["tipo"] = np.where(tmp[col_dep].astype(str).str.upper().str.startswith("VENTANILL"), "VENTANILLA", "MESA")
 
 summary = (tmp
     .pivot_table(index=col_radicado,
                  columns="tipo",
-                 values=["TOTAL_DIAS_VENTANILLA","TIEMPO_EN_MESA_DE_CREACION",
-                         "TOTAL_DIAS_VENTANILLA_NATURALES","TIEMPO_EN_MESA_DE_CREACION_NATURALES"],
+                 values=["TOTAL_DIAS_VENTANILLA","TIEMPO_EN_MESA_DE_CREACION"],
                  aggfunc="max")
     .reset_index()
 )
-# Asegurar que la primera columna se llama exactamente col_radicado
-if summary.columns[0] != col_radicado:
-    summary.rename(columns={summary.columns[0]: col_radicado}, inplace=True)
 
-# Renombrar columnas multiíndice a plano
+# Asegurar que la 1ª columna sea exactamente col_radicado
+first_col = summary.columns[0]
+if first_col != col_radicado:
+    summary.rename(columns={first_col: col_radicado}, inplace=True)
+
 summary.columns = [
     (c if isinstance(c, str) else f"{c[0]}_{c[1]}")
     for c in summary.columns
@@ -286,24 +310,85 @@ detalles_cols = pd.DataFrame([
 ])
 
 # -------------------------------------------------------------------
-# Preparar tipos finales para Excel:
-# - Fechas: ya están como date (sin hora) en columnas originales
-# - numero_radicado: texto (string) y prefijo apóstrofe para Excel
+# Auditoría de pareo (nueva hoja)
 # -------------------------------------------------------------------
-df[col_radicado] = df["_rad_str"].astype("string")
-if col_radicado in summary.columns:
-    summary[col_radicado] = summary[col_radicado].astype("string")
+print("Construyendo hoja Auditoria_pareo...")
+aud_rows = []
+vent_rows = df.loc[mask_vent].index
+for i in vent_rows:
+    rad = df.loc[i, col_radicado]
+    vent_date = df.loc[i, "_fecha_asignacion"]
+    mesas = mesa_asig.get(rad, [])
+    mesas_validas = [d for d in mesas if pd.notna(d)]
+    mesa_sel = mesa_ref_date(rad, vent_date) if pd.notna(vent_date) else pd.NaT
+
+    if not mesas_validas:
+        estado = "SIN_PAREO"
+        motivo = "Sin fechas MESA"
+    elif pd.isna(vent_date):
+        estado = "SIN_PAREO"
+        motivo = "VENT sin fecha"
+    elif pd.notna(mesa_sel):
+        if mesa_sel >= vent_date:
+            estado = "PAREO"
+            motivo = "MESA ≥ VENT"
+        else:
+            estado = "PAREO"
+            motivo = "MESA mínima < VENT"
+    else:
+        estado = "SIN_PAREO"
+        motivo = "No se encontró MESA ≥ VENT"
+
+    aud_rows.append({
+        col_radicado: rad,
+        "VENT_FECHA_ASIGNACION": vent_date,
+        "MESA_FECHAS_DISPONIBLES": ", ".join(sorted([d.strftime("%Y-%m-%d") for d in mesas_validas])) if mesas_validas else "",
+        "MESA_FECHA_SELECCIONADA": mesa_sel,
+        "ESTADO_PAREO": estado,
+        "MOTIVO": motivo
+    })
+
+auditoria_pareo = pd.DataFrame(aud_rows)
 
 # -------------------------------------------------------------------
-# Guardar Excel con formato fecha y texto
+# Construir dataframes de salida: ocultar técnicas y ordenar visibles
+# -------------------------------------------------------------------
+drop_cols = [
+    # Internas por prefijo "_"
+    *[c for c in df.columns if c.startswith("_")],
+    # Desgloses técnicos (no mostrar)
+    "TOTAL_DIAS_VENTANILLA_HABILES",
+    "TOTAL_DIAS_VENTANILLA_NATURALES",
+    "TIEMPO_EN_MESA_DE_CREACION_HABILES",
+    "TIEMPO_EN_MESA_DE_CREACION_NATURALES",
+    # Si existe una columna literal "N" (auxiliar), eliminarla
+    "N",
+]
+df_out = df.drop(columns=drop_cols, errors="ignore")
+df_pert_out = df_pert.drop(columns=drop_cols, errors="ignore")
+
+# --- Deduplicar: conservar SOLO la última 'TOTAL_DIAS_VENTANILLA' (la de la derecha) ---
+df_out = dedupe_keep_last_by_name(df_out,  "TOTAL_DIAS_VENTANILLA")
+df_pert_out = dedupe_keep_last_by_name(df_pert_out, "TOTAL_DIAS_VENTANILLA")
+
+# Reordenar: dejar al final las columnas principales (ALERTA, TIEMPO_EN_MESA_DE_CREACION, TOTAL_DIAS_VENTANILLA)
+final_cols = ["ALERTA", "TIEMPO_EN_MESA_DE_CREACION", "TOTAL_DIAS_VENTANILLA"]
+for c in final_cols:
+    if c in df_out.columns:
+        df_out = df_out[[col for col in df_out.columns if col != c] + [c]]
+    if c in df_pert_out.columns:
+        df_pert_out = df_pert_out[[col for col in df_pert_out.columns if col != c] + [c]]
+
+# -------------------------------------------------------------------
+# Guardar Excel con formato de fecha, texto y alineación solicitada
 # -------------------------------------------------------------------
 print("Guardando Excel de salida...")
 with pd.ExcelWriter(SALIDA, engine="openpyxl", datetime_format="YYYY-MM-DD", date_format="YYYY-MM-DD") as wr:
-    # Escribir hojas (sin MESA_FECHA_REFERENCIA)
-    df.to_excel(wr, index=False, sheet_name="Todos")
-    df_pert.to_excel(wr, index=False, sheet_name="Registros_para_revisar")
+    df_out.to_excel(wr, index=False, sheet_name="Todos")
+    df_pert_out.to_excel(wr, index=False, sheet_name="Registros_para_revisar")
     summary.to_excel(wr, index=False, sheet_name="Resumen_rad_duplicados")
     detalles_cols.to_excel(wr, index=False, sheet_name="Columnas_detectadas")
+    auditoria_pareo.to_excel(wr, index=False, sheet_name="Auditoria_pareo")
 
     wb = wr.book
 
@@ -317,22 +402,53 @@ with pd.ExcelWriter(SALIDA, engine="openpyxl", datetime_format="YYYY-MM-DD", dat
             for r in range(2, ws.max_row + 1):
                 ws[f"{col_letter}{r}"].number_format = fmt_fecha
 
-    # Hoja "Todos": formatear las columnas de fecha originales y las internas
+    # === Alineación solicitada (todas las celdas) ===
+    # Horizontal: izquierda; Vertical: superior; Justificado/Distribuido y wrap_text.
+    align_left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    align_distributed_top = Alignment(horizontal="distributed", vertical="top", wrap_text=True)
+
+    def alinear_hoja(ws):
+        # Aplica alineación a todas las celdas con dos pasadas:
+        # 1) izquierda-arriba (base)
+        # 2) distribuido-arriba (mejor justificado visual)
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = align_left_top
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = align_distributed_top
+
+    # Hoja "Todos": formatear fechas y alinear
     ws = wb["Todos"]
     headers_todos = [cell.value for cell in ws[1]]
-    fecha_cols_todos = [col_asigna, col_caso_crea] + \
-                       [c for c in df.columns if c.startswith("_") and "fecha" in c.lower()]
+    fecha_cols_todos = [col_asigna, col_caso_crea]
     formatear_fechas(ws, set(fecha_cols_todos) & set(headers_todos))
+    alinear_hoja(ws)
 
-    # Hoja "Registros_para_revisar": formatear fechas originales e internas si están
+    # Hoja "Registros_para_revisar": fechas y alineación
     ws = wb["Registros_para_revisar"]
     headers_rev = [cell.value for cell in ws[1]]
-    fecha_cols_rev = [col_asigna, col_caso_crea] + \
-                     [c for c in df_pert.columns if c.startswith("_") and "fecha" in c.lower()]
+    fecha_cols_rev = [col_asigna, col_caso_crea]
     formatear_fechas(ws, set(fecha_cols_rev) & set(headers_rev))
+    alinear_hoja(ws)
+
+    # Hoja "Resumen_rad_duplicados": alineación general
+    ws = wb["Resumen_rad_duplicados"]
+    alinear_hoja(ws)
+
+    # Hoja "Columnas_detectadas": alineación general
+    ws = wb["Columnas_detectadas"]
+    alinear_hoja(ws)
+
+    # Hoja "Auditoria_pareo": fechas y alineación
+    ws = wb["Auditoria_pareo"]
+    headers_aud = [cell.value for cell in ws[1]]
+    fecha_cols_aud = ["VENT_FECHA_ASIGNACION", "MESA_FECHA_SELECCIONADA"]
+    formatear_fechas(ws, set(fecha_cols_aud) & set(headers_aud))
+    alinear_hoja(ws)
 
     # === Forzar numero_radicado como texto en Excel (prefijo apóstrofe) ===
-    for sheet_name in ["Todos", "Resumen_rad_duplicados"]:
+    for sheet_name in ["Todos", "Resumen_rad_duplicados", "Auditoria_pareo"]:
         ws = wb[sheet_name]
         headers = [cell.value for cell in ws[1]]
         if col_radicado in headers:
@@ -345,7 +461,4 @@ with pd.ExcelWriter(SALIDA, engine="openpyxl", datetime_format="YYYY-MM-DD", dat
                 val = ws[f"{col_letter}{r}"].value
                 if val is not None:
                     ws[f"{col_letter}{r}"].value = "'" + str(val)
-
-print(f"== Listo: {SALIDA} ==")
-
 
