@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "moduleResolution": "node",
+    "lib": ["ES2020"],                  // ✅ añade la lib de ES para evitar mezclar DOM
+    "types": ["node"],                  // ✅ usa tipos de Node en todo el proyecto
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true, // ✅ ayuda con paquetes CJS/ESM
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "outDir": "dist",
+    "sourceMap": true,
+    "skipLibCheck": true,               // ✅ ya lo tienes; evita choques de d.ts de terceros
+    "resolveJsonModule": true,          // (opcional) útil si cargas JSON
+    "noEmitOnError": false              // (opcional) que no bloquee el emit por warnings
+  },
+  "include": ["src/**/*"]
+}

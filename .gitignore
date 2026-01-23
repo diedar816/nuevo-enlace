@@ -1,0 +1,67 @@
+
+########################################
+# NODE.JS (dentro de /node)
+########################################
+
+# Dependencias instaladas
+node/node_modules/
+
+# Build de TypeScript
+node/dist/
+
+# Archivos generados por TSC
+node/**/*.tsbuildinfo
+
+# Logs de Node
+node/npm-debug.log*
+node/yarn-error.log*
+node/pnpm-debug.log*
+
+########################################
+# PYTHON (parte fuera de /node)
+########################################
+
+# Carpetas de bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Entornos virtuales (virtualenv o venv)
+.venv/
+venv/
+env/
+
+# Cache de herramientas
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+########################################
+# ARCHIVOS DE ENTORNO
+########################################
+
+.env
+.env.*
+
+########################################
+# LOGS GENERALES
+########################################
+
+*.log
+logs/
+
+########################################
+# EDITORES / IDE
+########################################
+
+.vscode/
+.idea/
+
+########################################
+# SISTEMA OPERATIVO
+########################################
+
+Thumbs.db
+.DS_Store
+
