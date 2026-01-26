@@ -13,6 +13,7 @@
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
+    "@nestjs/platform-express": "^11.1.12",
     "exceljs": "^4.4.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
@@ -24,4 +25,3 @@
     "typescript": "^5.4.0"
   }
 }
-

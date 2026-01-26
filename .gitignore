@@ -1,55 +1,79 @@
 
 ########################################
-# NODE.JS (dentro de /node)
+# BACKEND – NODE / NESTJS
 ########################################
 
-# Dependencias instaladas
+# Dependencias
 node/node_modules/
 
-# Build de TypeScript
+# Build TypeScript
 node/dist/
 
-# Archivos generados por TSC
+# TS Build Info
 node/**/*.tsbuildinfo
+
+# JS generados por Nest fuera de dist
+node/**/*.js
+node/**/*.js.map
 
 # Logs de Node
 node/npm-debug.log*
-node/yarn-error.log*
+node/yarn-debug.log*
 node/pnpm-debug.log*
 
+# Caches
+.turbo/
+.cache/
+
 ########################################
-# PYTHON (parte fuera de /node)
+# FRONTEND – REACT + VITE
 ########################################
 
-# Carpetas de bytecode
+Tablero/node_modules/
+Tablero/dist/
+Tablero/dist-ssr/
+Tablero/.vite/
+Tablero/.env
+Tablero/.env.*
+Tablero/*.local
+
+# Evitar subir dependencias de Vite
+Tablero/.pnpm/
+
+########################################
+# PYTHON
+########################################
+
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Entornos virtuales (virtualenv o venv)
 .venv/
 venv/
 env/
-
-# Cache de herramientas
 .pytest_cache/
 .mypy_cache/
-.cache/
 
 ########################################
-# ARCHIVOS DE ENTORNO
+# ENTORNOS / SECRETOS
 ########################################
 
 .env
 .env.*
 
 ########################################
-# LOGS GENERALES
+# ARCHIVOS GRANDES / TEMPORALES
 ########################################
 
-*.log
-logs/
+*.xlsx
+*.csv
+*.zip
+*.rar
+*.7z
+*.hyper
+*.twb
+*.twbx
 
 ########################################
 # EDITORES / IDE
@@ -57,11 +81,10 @@ logs/
 
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 
 ########################################
 # SISTEMA OPERATIVO
 ########################################
-
-Thumbs.db
-.DS_Store
 
